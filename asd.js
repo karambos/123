@@ -26,8 +26,6 @@
         expiryTime: 0
     };
 
-    let isInitialized = false;
-
     // Загрузка токена
     function loadTokenFromStorage() {
         try {
@@ -130,11 +128,7 @@
         const token = await ensureToken();
         if (!token) {
             console.warn('[AnimeLib] Нет токена');
-            return [{
-                id: 'error',
-                title: '❌ Токен не найден',
-                description: 'Перейдите в Настройки → Расширения → AnimeLib и введите токен'
-            }];
+            return [];
         }
 
         const cacheKey = `animelib_search_${query}`;
@@ -164,11 +158,7 @@
                 if (newToken) {
                     return searchAnime(query);
                 }
-                return [{
-                    id: 'error',
-                    title: '❌ Ошибка авторизации',
-                    description: 'Токен истек. Обновите его в настройках'
-                }];
+                return [];
             }
 
             if (!response.ok) {
@@ -206,11 +196,7 @@
 
         } catch (e) {
             console.error('[AnimeLib] Ошибка поиска:', e);
-            return [{
-                id: 'error',
-                title: '❌ Ошибка поиска',
-                description: e.message || 'Проверьте подключение к интернету'
-            }];
+            return [];
         }
     }
 
@@ -320,65 +306,79 @@
         }
     }
 
-    // Добавление источника с помощью обертки
-    function addSource() {
+    // Добавление плагина через другой метод
+    function addPlugin() {
         try {
-            // Проверяем через другой метод
-            if (typeof Lampa !== 'undefined' && Lampa.Source) {
-                // Проверяем наличие источника
-                let exists = false;
-                try {
-                    if (Lampa.Source.list) {
-                        exists = Lampa.Source.list().includes('animelib');
-                    }
-                } catch (e) {}
-
-                if (exists) {
-                    console.log('[AnimeLib] Источник уже добавлен');
+            // Проверяем, есть ли уже такой плагин
+            if (Lampa.Plugin && Lampa.Plugin.list) {
+                const plugins = Lampa.Plugin.list();
+                if (plugins && plugins.includes('animelib')) {
+                    console.log('[AnimeLib] Плагин уже добавлен');
                     return true;
                 }
+            }
 
-                // Добавляем источник
-                Lampa.Source.add('animelib', {
-                    name: 'AnimeLib',
-                    icon: '🎌',
-                    type: 'anime',
-                    search: function(query, callback) {
-                        searchAnime(query).then(results => {
-                            callback(results);
-                        }).catch(e => {
-                            console.error('[AnimeLib] Ошибка поиска:', e);
-                            callback([]);
-                        });
-                    },
-                    getPlaylist: function(item, callback) {
-                        getAnimePlaylist(item).then(playlist => {
-                            callback(playlist);
-                        }).catch(e => {
-                            console.error('[AnimeLib] Ошибка плейлиста:', e);
-                            callback(null);
-                        });
-                    }
-                });
+            // Создаем объект плагина
+            const plugin = {
+                name: 'AnimeLib',
+                icon: '🎌',
+                type: 'anime',
+                search: function(query, callback) {
+                    searchAnime(query).then(results => {
+                        callback(results);
+                    }).catch(e => {
+                        console.error('[AnimeLib] Ошибка поиска:', e);
+                        callback([]);
+                    });
+                },
+                getPlaylist: function(item, callback) {
+                    getAnimePlaylist(item).then(playlist => {
+                        callback(playlist);
+                    }).catch(e => {
+                        console.error('[AnimeLib] Ошибка плейлиста:', e);
+                        callback(null);
+                    });
+                }
+            };
 
-                console.log('[AnimeLib] Источник добавлен');
+            // Пробуем добавить через Lampa.Plugin
+            if (Lampa.Plugin && typeof Lampa.Plugin.add === 'function') {
+                Lampa.Plugin.add('animelib', plugin);
+                console.log('[AnimeLib] Плагин добавлен через Lampa.Plugin');
                 return true;
             }
-            return false;
+
+            // Или через Lampa.Source
+            if (Lampa.Source && typeof Lampa.Source.add === 'function') {
+                Lampa.Source.add('animelib', plugin);
+                console.log('[AnimeLib] Плагин добавлен через Lampa.Source');
+                return true;
+            }
+
+            // Или через прямое добавление в глобальный объект
+            if (typeof window.LampaPlugins === 'undefined') {
+                window.LampaPlugins = {};
+            }
+            window.LampaPlugins.animelib = plugin;
+            console.log('[AnimeLib] Плагин добавлен в глобальный объект');
+            return true;
+
         } catch (e) {
-            console.error('[AnimeLib] Ошибка добавления источника:', e);
+            console.error('[AnimeLib] Ошибка добавления плагина:', e);
             return false;
         }
     }
 
-    // Добавление настроек
+    // Добавление настроек через UI
     function addSettings() {
         try {
+            // Проверяем наличие SettingsApi
             if (!Lampa.SettingsApi || typeof Lampa.SettingsApi.addComponent !== 'function') {
-                console.warn('[AnimeLib] SettingsApi не готов');
+                console.warn('[AnimeLib] SettingsApi не доступен');
                 return false;
             }
 
+            // Проверяем, есть ли уже настройки
             if (Lampa.SettingsApi.getComponent && Lampa.SettingsApi.getComponent('animelib_settings')) {
                 return true;
             }
@@ -400,9 +400,7 @@
                                 tokenCache.token = value;
                                 tokenCache.expiryTime = Date.now() + 2592000000;
                                 saveTokenToStorage();
-                                if (Lampa.Notify) {
-                                    Lampa.Notify.show('✅ Токен сохранен', 'AnimeLib');
-                                }
+                                showNotify('✅ Токен сохранен');
                             }
                             ensureToken();
                         }
@@ -416,9 +414,7 @@
                         onSave: function(value) {
                             tokenCache.refreshToken = value;
                             saveTokenToStorage();
-                            if (Lampa.Notify) {
-                                Lampa.Notify.show('✅ Refresh токен сохранен', 'AnimeLib');
-                            }
+                            showNotify('✅ Refresh токен сохранен');
                         }
                     },
                     {
@@ -430,28 +426,16 @@
                                 const token = await ensureToken();
                                 if (token) {
                                     const results = await searchAnime('naruto');
-                                    if (results && results.length > 0 && results[0].id !== 'error') {
-                                        if (Lampa.Notify) {
-                                            Lampa.Notify.show('✅ Подключение работает! Найдено ' + results.length + ' результатов', 'AnimeLib');
-                                        }
-                                    } else if (results && results[0] && results[0].id === 'error') {
-                                        if (Lampa.Notify) {
-                                            Lampa.Notify.show('❌ ' + results[0].description, 'AnimeLib');
-                                        }
+                                    if (results && results.length > 0) {
+                                        showNotify('✅ Подключение работает! Найдено ' + results.length + ' результатов');
                                     } else {
-                                        if (Lampa.Notify) {
-                                            Lampa.Notify.show('⚠️ Токен есть, но ничего не найдено', 'AnimeLib');
-                                        }
+                                        showNotify('⚠️ Токен есть, но ничего не найдено');
                                     }
                                 } else {
-                                    if (Lampa.Notify) {
-                                        Lampa.Notify.show('❌ Токен не найден. Введите токен в настройках', 'AnimeLib');
-                                    }
+                                    showNotify('❌ Токен не найден. Введите токен в настройках');
                                 }
                             } catch (e) {
-                                if (Lampa.Notify) {
-                                    Lampa.Notify.show('❌ Ошибка: ' + e.message, 'AnimeLib');
-                                }
+                                showNotify('❌ Ошибка: ' + e.message);
                             }
                         }
                     },
@@ -469,13 +453,9 @@
                                         count++;
                                     }
                                 });
-                                if (Lampa.Notify) {
-                                    Lampa.Notify.show('✅ Очищено ' + count + ' записей кэша', 'AnimeLib');
-                                }
+                                showNotify('✅ Очищено ' + count + ' записей кэша');
                             } catch (e) {
-                                if (Lampa.Notify) {
-                                    Lampa.Notify.show('❌ Ошибка: ' + e.message, 'AnimeLib');
-                                }
+                                showNotify('❌ Ошибка: ' + e.message);
                             }
                         }
                     }
@@ -491,68 +471,80 @@
         }
     }
 
-    // Главная функция инициализации
+    // Функция для показа уведомлений
+    function showNotify(message) {
+        try {
+            if (Lampa.Notify && typeof Lampa.Notify.show === 'function') {
+                Lampa.Notify.show(message, 'AnimeLib');
+            } else {
+                console.log('[AnimeLib]', message);
+            }
+        } catch (e) {
+            console.log('[AnimeLib]', message);
+        }
+    }
+
+    // Инициализация плагина
     function initPlugin() {
-        if (isInitialized) {
-            return;
-        }
-
-        console.log('[AnimeLib] Начало инициализации...');
-
-        // Проверяем наличие Lampa
-        if (typeof Lampa === 'undefined') {
-            console.warn('[AnimeLib] Lampa не определена, ждем...');
-            setTimeout(initPlugin, 500);
-            return;
-        }
+        console.log('[AnimeLib] Инициализация...');
 
         // Загружаем токен
         loadTokenFromStorage();
 
-        // Добавляем источник
-        const sourceAdded = addSource();
+        // Добавляем плагин
+        const added = addPlugin();
 
-        if (!sourceAdded) {
-            console.warn('[AnimeLib] Не удалось добавить источник, пробуем позже...');
-            setTimeout(initPlugin, 1000);
+        if (added) {
+            // Добавляем настройки
+            addSettings();
+            console.log('[AnimeLib] Плагин успешно инициализирован!');
+            showNotify('✅ AnimeLib плагин загружен');
+        } else {
+            console.warn('[AnimeLib] Не удалось добавить плагин');
+            // Пробуем еще раз через 2 секунды
+            setTimeout(function() {
+                console.log('[AnimeLib] Повторная попытка инициализации...');
+                initPlugin();
+            }, 2000);
+        }
+    }
+
+    // Запуск плагина
+    function startPlugin() {
+        if (typeof Lampa === 'undefined') {
+            console.warn('[AnimeLib] Lampa не загружена, ждем...');
+            setTimeout(startPlugin, 500);
             return;
         }
 
-        // Добавляем настройки
-        addSettings();
-
-        isInitialized = true;
-        console.log('[AnimeLib] Плагин полностью инициализирован!');
+        console.log('[AnimeLib] Lampa загружена, запускаем плагин...');
+        initPlugin();
     }
 
-    // Запуск через события Lampa
+    // Подписываемся на события Lampa
     if (typeof Lampa !== 'undefined' && Lampa.Listener) {
-        // Подписываемся на событие готовности
         Lampa.Listener.follow('app', function(event) {
             if (event.type === 'ready') {
-                console.log('[AnimeLib] Приложение готово');
-                setTimeout(initPlugin, 100);
+                console.log('[AnimeLib] Приложение Lampa готово');
+                setTimeout(startPlugin, 500);
             }
         });
 
-        // Если приложение уже готово
         if (window.appready) {
-            setTimeout(initPlugin, 100);
+            setTimeout(startPlugin, 500);
         }
     } else {
-        // Если Lampa еще не загружена
-        console.log('[AnimeLib] Ожидание загрузки Lampa...');
+        // Ждем загрузки Lampa
         const waitForLampa = setInterval(function() {
-            if (typeof Lampa !== 'undefined' && Lampa.Listener) {
+            if (typeof Lampa !== 'undefined') {
                 clearInterval(waitForLampa);
-                console.log('[AnimeLib] Lampa загружена');
-                
+                console.log('[AnimeLib] Lampa обнаружена');
                 if (window.appready) {
-                    setTimeout(initPlugin, 100);
+                    setTimeout(startPlugin, 500);
                 } else {
                     Lampa.Listener.follow('app', function(event) {
                         if (event.type === 'ready') {
-                            setTimeout(initPlugin, 100);
+                            setTimeout(startPlugin, 500);
                         }
                     });
                 }
