@@ -177,38 +177,35 @@
         }
     }
 
-    // Обработка URL видео
-    function processVideoUrl(url) {
+    // Обработка URL видео через прокси
+    function getProxiedUrl(url) {
         if (!url) return null;
         
-        // Если URL уже полный
-        if (url.indexOf('http') === 0) {
-            // Исправляем проблему с .%D0%B0s
-            if (url.indexOf('.%D0%B0s/') !== -1) {
-                url = url.replace('.%D0%B0s/', '.as/');
-            }
-            // Убираем двойные слеши
-            url = url.replace(/([^:])\/\/+/g, '$1/');
-            return url;
+        // Исправляем URL
+        if (url.indexOf('.%D0%B0s/') !== -1) {
+            url = url.replace('.%D0%B0s/', '.as/');
         }
+        url = url.replace(/([^:])\/\/+/g, '$1/');
         
-        // Если относительный URL
-        if (url.indexOf('/') === 0) {
-            var fullUrl = CONFIG.videoHost + url;
-            if (fullUrl.indexOf('.%D0%B0s/') !== -1) {
-                fullUrl = fullUrl.replace('.%D0%B0s/', '.as/');
-            }
-            fullUrl = fullUrl.replace(/([^:])\/\/+/g, '$1/');
-            return fullUrl;
-        }
+        // Используем прокси Lampa
+        // Формат: /proxy?url=VIDEO_URL&headers=origin:HOST|referer:HOST
+        var proxiedUrl = '/proxy?url=' + encodeURIComponent(url) + 
+                         '&headers=origin:' + CONFIG.host + '|referer:' + CONFIG.host + '/';
         
-        // Если просто путь без слеша
-        var fullUrl = CONFIG.videoHost + '/' + url;
-        if (fullUrl.indexOf('.%D0%B0s/') !== -1) {
-            fullUrl = fullUrl.replace('.%D0%B0s/', '.as/');
+        console.log('[AnimeLib] Прокси URL:', proxiedUrl);
+        return proxiedUrl;
+    }
+
+    // Альтернативный метод - попытка прямого воспроизведения
+    function getDirectUrl(url) {
+        if (!url) return null;
+        
+        if (url.indexOf('.%D0%B0s/') !== -1) {
+            url = url.replace('.%D0%B0s/', '.as/');
         }
-        fullUrl = fullUrl.replace(/([^:])\/\/+/g, '$1/');
-        return fullUrl;
+        url = url.replace(/([^:])\/\/+/g, '$1/');
+        
+        return url;
     }
 
     // Поиск аниме
@@ -323,12 +320,26 @@
                             return qb - qa;
                         });
                         
-                        // Обрабатываем ссылки
+                        // Создаем ссылки через прокси
                         var processedQualities = qualities.map(function(q) {
-                            var videoUrl = processVideoUrl(q.href);
+                            var directUrl = q.href;
+                            // Исправляем URL
+                            if (directUrl.indexOf('.%D0%B0s/') !== -1) {
+                                directUrl = directUrl.replace('.%D0%B0s/', '.as/');
+                            }
+                            if (directUrl.indexOf('http') !== 0) {
+                                directUrl = CONFIG.videoHost + '/' + directUrl;
+                            }
+                            directUrl = directUrl.replace(/([^:])\/\/+/g, '$1/');
+                            
+                            // Прокси URL
+                            var proxiedUrl = '/proxy?url=' + encodeURIComponent(directUrl) + 
+                                            '&headers=origin:' + CONFIG.host + '|referer:' + CONFIG.host + '/';
+                            
                             return {
                                 quality: q.quality,
-                                href: videoUrl,
+                                href: proxiedUrl,
+                                direct: directUrl,
                                 original: q.href
                             };
                         });
@@ -342,7 +353,8 @@
                             url: bestQuality.href,
                             season: ep.season || 1,
                             episode: ep.number || i + 1,
-                            qualities: processedQualities
+                            qualities: processedQualities,
+                            directUrl: bestQuality.direct
                         });
                     }
                 } catch (e) {
@@ -372,6 +384,7 @@
             console.log('[AnimeLib] Воспроизведение:', episode.title);
             console.log('[AnimeLib] URL:', episode.url);
 
+            // Пробуем через прокси
             var playerData = {
                 url: episode.url,
                 title: episode.title,
@@ -577,6 +590,7 @@
                                 return {
                                     title: q.quality + 'p',
                                     url: q.href,
+                                    direct: q.direct,
                                     index: index
                                 };
                             });
