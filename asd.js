@@ -31,6 +31,103 @@
         return token && token.length > 0;
     }
 
+    // Показать диалог ввода токена
+    function showTokenDialog(callback) {
+        var currentToken = getToken();
+        
+        var dialog = $('<div class="modal animelib-modal" style="position:fixed;top:0;left:0;right:0;bottom:0;z-index:9999;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.85)">' +
+            '<div style="background:#1a1a2e;padding:2em;border-radius:0.5em;max-width:500px;width:90%;border:1px solid #333">' +
+            '<div style="font-size:1.5em;margin-bottom:0.3em;text-align:center">🎌 AnimeLib</div>' +
+            '<div style="opacity:0.6;margin-bottom:1.5em;text-align:center;font-size:0.9em">Введите Access Token для доступа к Anilib.me</div>' +
+            '<input type="text" id="animelib_token_input" style="width:100%;padding:0.8em;border-radius:0.3em;border:1px solid #444;background:#2a2a4e;color:#fff;font-size:1em;box-sizing:border-box" placeholder="Введите токен..." value="' + currentToken + '">' +
+            '<div style="display:flex;gap:0.5em;margin-top:1em">' +
+            '<button class="animelib-save-btn selector" style="flex:1;padding:0.8em;border:none;border-radius:0.3em;background:#e74c3c;color:#fff;font-size:1em;cursor:pointer">💾 Сохранить</button>' +
+            '<button class="animelib-cancel-btn selector" style="flex:1;padding:0.8em;border:none;border-radius:0.3em;background:#444;color:#fff;font-size:1em;cursor:pointer">❌ Отмена</button>' +
+            '</div>' +
+            '<div id="animelib_token_status" style="margin-top:0.5em;text-align:center;font-size:0.9em;opacity:0.7"></div>' +
+            '</div>' +
+            '</div>');
+
+        $('body').append(dialog);
+
+        setTimeout(function() {
+            dialog.find('#animelib_token_input').focus();
+        }, 100);
+
+        dialog.find('.animelib-save-btn').on('hover:enter', function() {
+            var token = dialog.find('#animelib_token_input').val().trim();
+            if (token && token.length > 0) {
+                setToken(token);
+                dialog.find('#animelib_token_status').text('✅ Токен сохранен!').css('color', '#2ecc71');
+                setTimeout(function() {
+                    dialog.remove();
+                    if (callback) callback(true);
+                }, 500);
+            } else {
+                dialog.find('#animelib_token_status').text('❌ Введите токен').css('color', '#e74c3c');
+            }
+        });
+
+        dialog.find('.animelib-cancel-btn').on('hover:enter', function() {
+            dialog.remove();
+            if (callback) callback(false);
+        });
+
+        dialog.on('click', function(e) {
+            if (e.target === this) {
+                dialog.remove();
+                if (callback) callback(false);
+            }
+        });
+
+        dialog.find('#animelib_token_input').on('keydown', function(e) {
+            if (e.key === 'Enter') {
+                dialog.find('.animelib-save-btn').trigger('hover:enter');
+            }
+        });
+    }
+
+    // Добавление пункта в меню
+    function addMenuButton() {
+        console.log('[AnimeLib] Добавление кнопки в меню...');
+        
+        var buttonHtml = '<div class="menu__item selector animelib-menu-btn" style="padding:0.8em 1.2em;cursor:pointer;display:flex;align-items:center;gap:0.8em">' +
+            '<span style="font-size:1.2em">🎌</span>' +
+            '<span style="font-size:0.9em">AnimeLib</span>' +
+            '</div>';
+
+        // Ждем загрузки меню
+        var checkMenu = setInterval(function() {
+            var menuList = document.querySelector('.menu__list');
+            if (menuList) {
+                clearInterval(checkMenu);
+                
+                // Проверяем, есть ли уже кнопка
+                if (document.querySelector('.animelib-menu-btn')) {
+                    console.log('[AnimeLib] Кнопка уже есть');
+                    return;
+                }
+                
+                var btn = $(buttonHtml);
+                btn.on('hover:enter', function() {
+                    // Показываем диалог ввода токена
+                    showTokenDialog(function(success) {
+                        if (success) {
+                            Lampa.Notify.show('✅ Токен сохранен!', 'AnimeLib');
+                        }
+                    });
+                });
+                
+                $(menuList).append(btn);
+                console.log('[AnimeLib] Кнопка добавлена в меню');
+            }
+        }, 500);
+
+        setTimeout(function() {
+            clearInterval(checkMenu);
+        }, 10000);
+    }
+
     // Поиск аниме
     async function searchAnime(query) {
         var token = getToken();
@@ -217,8 +314,18 @@
                 var html = $('<div style="padding:2em;text-align:center">' +
                     '<div style="font-size:1.8em;margin-bottom:0.5em">🔑 Требуется токен</div>' +
                     '<div style="opacity:0.7;font-size:1.2em;margin-bottom:1em">Для работы с AnimeLib необходим Access Token</div>' +
-                    '<div style="opacity:0.6;font-size:1em">Перейдите в Настройки → Расширения → AnimeLib</div>' +
+                    '<div class="selector" style="display:inline-block;padding:0.8em 2em;background:#e74c3c;border-radius:0.3em;cursor:pointer">Ввести токен</div>' +
+                    '<div style="opacity:0.5;font-size:0.9em;margin-top:1em">Или в главном меню нажмите 🎌 AnimeLib</div>' +
                     '</div>');
+                
+                html.find('.selector').on('hover:enter', function() {
+                    showTokenDialog(function(success) {
+                        if (success) {
+                            self.searchAnime(object.search || object.movie.title || object.movie.name);
+                        }
+                    });
+                });
+                
                 scroll.append(html);
                 Lampa.Controller.enable('content');
             };
@@ -383,7 +490,7 @@
     }
 
     // Добавление кнопки в карточку
-    function addButtonToCard() {
+    function addCardButton() {
         var buttonHtml = '<div class="full-start__button selector view--animelib" style="background:rgba(255,50,50,0.2);margin-top:0.5em;cursor:pointer">\n            <svg viewBox="0 0 24 24" width="24" height="24">\n                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 14.5v-9l6 4.5-6 4.5z" fill="currentColor"/>\n            </svg>\n            <span>AnimeLib</span>\n        </div>';
 
         Lampa.Listener.follow('full', function(e) {
@@ -409,124 +516,6 @@
                 container.after(btn);
             }
         });
-
-        try {
-            var active = Lampa.Activity.active();
-            if (active && active.component == 'full' && active.card) {
-                var container = active.activity.render().find('.view--torrent');
-                if (container.length && !container.find('.view--animelib').length) {
-                    var btn = $(buttonHtml);
-                    btn.on('hover:enter', function() {
-                        var movie = active.card;
-                        Lampa.Activity.push({
-                            title: 'AnimeLib',
-                            component: 'animelib_component',
-                            search: movie.title || movie.name,
-                            movie: movie
-                        });
-                    });
-                    container.after(btn);
-                }
-            }
-        } catch (e) {}
-    }
-
-    // Добавление настроек
-    function addSettings() {
-        console.log('[AnimeLib] Добавление настроек...');
-        
-        try {
-            // Проверяем, есть ли уже настройки
-            if (Lampa.SettingsApi.getComponent('animelib_settings')) {
-                console.log('[AnimeLib] Настройки уже добавлены');
-                return;
-            }
-
-            var settings = {
-                component: 'animelib_settings',
-                name: 'AnimeLib',
-                icon: '🎌',
-                settings: [
-                    {
-                        type: 'input',
-                        name: 'animelib_token_input',
-                        title: 'Access Token',
-                        placeholder: 'Введите токен доступа',
-                        value: getToken(),
-                        onSave: function(value) {
-                            if (value && value.trim()) {
-                                setToken(value.trim());
-                                if (Lampa.Notify) {
-                                    Lampa.Notify.show('✅ Токен сохранен', 'AnimeLib');
-                                }
-                                console.log('[AnimeLib] Токен сохранен');
-                            } else {
-                                if (Lampa.Notify) {
-                                    Lampa.Notify.show('❌ Токен не может быть пустым', 'AnimeLib');
-                                }
-                            }
-                        }
-                    },
-                    {
-                        type: 'button',
-                        name: 'animelib_test_btn',
-                        title: '🔍 Проверить подключение',
-                        onClick: async function() {
-                            try {
-                                var token = getToken();
-                                if (!token) {
-                                    if (Lampa.Notify) {
-                                        Lampa.Notify.show('❌ Сначала введите токен', 'AnimeLib');
-                                    }
-                                    return;
-                                }
-                                
-                                if (Lampa.Notify) {
-                                    Lampa.Notify.show('⏳ Проверка подключения...', 'AnimeLib');
-                                }
-                                
-                                var results = await searchAnime('naruto');
-                                if (results && results.length > 0) {
-                                    if (Lampa.Notify) {
-                                        Lampa.Notify.show('✅ Подключение работает! Найдено ' + results.length + ' результатов', 'AnimeLib');
-                                    }
-                                } else {
-                                    if (Lampa.Notify) {
-                                        Lampa.Notify.show('⚠️ Токен есть, но ничего не найдено', 'AnimeLib');
-                                    }
-                                }
-                            } catch (e) {
-                                if (Lampa.Notify) {
-                                    Lampa.Notify.show('❌ Ошибка: ' + e.message, 'AnimeLib');
-                                }
-                            }
-                        }
-                    },
-                    {
-                        type: 'button',
-                        name: 'animelib_clear_btn',
-                        title: '🗑️ Очистить токен',
-                        onClick: function() {
-                            Lampa.Storage.remove('animelib_token');
-                            if (Lampa.Notify) {
-                                Lampa.Notify.show('✅ Токен удален', 'AnimeLib');
-                            }
-                            // Обновляем значение в поле
-                            var input = document.querySelector('[name="animelib_token_input"]');
-                            if (input) {
-                                input.value = '';
-                            }
-                        }
-                    }
-                ]
-            };
-
-            Lampa.SettingsApi.addComponent(settings);
-            console.log('[AnimeLib] Настройки добавлены!');
-            
-        } catch (e) {
-            console.error('[AnimeLib] Ошибка добавления настроек:', e);
-        }
     }
 
     // Запуск плагина
@@ -537,11 +526,18 @@
         var component = new AnimeLibComponent();
         Lampa.Component.add('animelib_component', component);
 
-        // Добавляем кнопку
-        setTimeout(addButtonToCard, 1000);
+        // Добавляем кнопку в меню для ввода токена
+        setTimeout(addMenuButton, 1000);
 
-        // Добавляем настройки
-        setTimeout(addSettings, 1500);
+        // Добавляем кнопку в карточку
+        setTimeout(addCardButton, 1500);
+
+        // Проверяем токен
+        if (!hasToken()) {
+            console.log('[AnimeLib] Токен не найден, нажмите 🎌 AnimeLib в меню для ввода');
+        } else {
+            console.log('[AnimeLib] Токен загружен');
+        }
 
         console.log('[AnimeLib] Плагин запущен!');
     }
