@@ -228,7 +228,7 @@
         }
     }
 
-    // Получение плейлиста
+    // Получение плейлиста с прокси
     async function getAnimePlaylist(item) {
         var token = getToken();
         if (!token) {
@@ -288,16 +288,21 @@
                             return qb - qa;
                         });
                         
-                        // Обрабатываем ссылки - добавляем прокси если нужно
+                        // Используем прокси Lampa для обхода CORS
                         var processedQualities = qualities.map(function(q) {
-                            var url = q.href;
+                            var videoUrl = q.href;
                             // Если ссылка не полная, добавляем домен
-                            if (url && url.indexOf('http') !== 0) {
-                                url = 'https://video1.cdnlibs.org/.%D0%B0s/' + url;
+                            if (videoUrl && videoUrl.indexOf('http') !== 0) {
+                                videoUrl = 'https://video1.cdnlibs.org/.%D0%B0s/' + videoUrl;
                             }
+                            
+                            // Используем прокси Lampa
+                            var proxiedUrl = '/proxy?url=' + encodeURIComponent(videoUrl) + '&headers=origin:' + CONFIG.host + '|referer:' + CONFIG.host + '/';
+                            
                             return {
                                 quality: q.quality,
-                                href: url
+                                href: proxiedUrl,
+                                original_url: videoUrl
                             };
                         });
                         
@@ -331,7 +336,7 @@
         }
     }
 
-    // Воспроизведение видео с прокси
+    // Воспроизведение видео
     function playVideo(episode) {
         try {
             if (!episode.url) {
@@ -354,7 +359,7 @@
                 playerData.headers = episode.headers;
             }
 
-            // Если есть качества
+            // Если есть качества, добавляем их
             if (episode.qualities && episode.qualities.length > 0) {
                 var qualityMap = {};
                 episode.qualities.forEach(function(q) {
@@ -544,7 +549,8 @@
                                 return {
                                     title: q.quality + 'p',
                                     url: q.href,
-                                    index: index
+                                    index: index,
+                                    original_url: q.original_url
                                 };
                             });
                             
