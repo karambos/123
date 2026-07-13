@@ -35,7 +35,7 @@
     function showTokenDialog(callback) {
         var currentToken = getToken();
         
-        var dialog = $('<div class="modal animelib-modal" style="position:fixed;top:0;left:0;right:0;bottom:0;z-index:9999;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.85);z-index:99999">' +
+        var dialog = $('<div class="modal animelib-modal" style="position:fixed;top:0;left:0;right:0;bottom:0;z-index:99999;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.85)">' +
             '<div style="background:#1a1a2e;padding:2em;border-radius:0.5em;max-width:500px;width:90%;border:1px solid #333">' +
             '<div style="font-size:1.5em;margin-bottom:0.3em;text-align:center">🎌 AnimeLib</div>' +
             '<div style="opacity:0.6;margin-bottom:1.5em;text-align:center;font-size:0.9em">Введите Access Token для доступа к Anilib.me</div>' +
@@ -228,7 +228,7 @@
         }
     }
 
-    // Получение плейлиста с качеством
+    // Получение плейлиста
     async function getAnimePlaylist(item) {
         var token = getToken();
         if (!token) {
@@ -288,12 +288,6 @@
                             return qb - qa;
                         });
                         
-                        var qualityMap = {};
-                        qualities.forEach(function(q) {
-                            var qualityName = q.quality + 'p';
-                            qualityMap[qualityName] = q.href;
-                        });
-                        
                         var bestQuality = qualities[0];
                         
                         playlist.push({
@@ -303,8 +297,7 @@
                             url: bestQuality.href,
                             season: ep.season || 1,
                             episode: ep.number || i + 1,
-                            qualities: qualityMap,
-                            allQualities: qualities
+                            qualities: qualities
                         });
                     }
                 } catch (e) {
@@ -339,10 +332,6 @@
                 description: episode.description || ''
             };
 
-            if (episode.qualities && Object.keys(episode.qualities).length > 0) {
-                playerData.quality = episode.qualities;
-            }
-
             Lampa.Player.play(playerData);
             
         } catch (e) {
@@ -353,7 +342,7 @@
         }
     }
 
-    // Компонент для Lampa - исправлен
+    // Компонент для Lampa - упрощенная версия без рекурсий
     function AnimeLibComponent() {
         return function(object) {
             var self = this;
@@ -379,10 +368,8 @@
                     }
                 };
                 
-                filter.onBack = function() {
-                    // Просто закрываем, без рекурсии
-                    Lampa.Activity.backward();
-                };
+                // Убираем onBack - он вызывает рекурсию
+                // filter.onBack = function() { ... }
                 
                 filter.render().find('.filter--search').appendTo(filter.render().find('.torrent-filter'));
                 
@@ -501,13 +488,13 @@
                         '<div style="font-size:1.2em;font-weight:500">' + ep.title + '</div>' +
                         '<div style="opacity:0.7;font-size:0.9em">' + (ep.description || '') + '</div>' +
                         '<div style="font-size:0.8em;opacity:0.5;margin-top:0.3em">' + 
-                            (ep.allQualities ? ep.allQualities.map(function(q) { return q.quality + 'p'; }).join(' | ') : '') + 
+                            (ep.qualities ? ep.qualities.map(function(q) { return q.quality + 'p'; }).join(' | ') : '') + 
                         '</div>' +
                         '</div>');
                     
                     html.on('hover:enter', function() {
-                        if (ep.allQualities && ep.allQualities.length > 1) {
-                            var qualityItems = ep.allQualities.map(function(q, index) {
+                        if (ep.qualities && ep.qualities.length > 1) {
+                            var qualityItems = ep.qualities.map(function(q, index) {
                                 return {
                                     title: q.quality + 'p',
                                     url: q.href,
@@ -608,8 +595,10 @@
                         }
                     },
                     back: function() {
-                        // Просто закрываем без рекурсии
-                        Lampa.Activity.backward();
+                        // Просто закрываем активность
+                        if (Lampa.Activity && Lampa.Activity.backward) {
+                            Lampa.Activity.backward();
+                        }
                     }
                 });
                 
