@@ -14,7 +14,8 @@
         host: 'https://anilib.me',
         apiHost: 'https://api.cdnlibs.org',
         clientId: '1',
-        siteId: '5'
+        siteId: '5',
+        videoHost: 'https://video1.cdnlibs.org'
     };
 
     // Работа с токеном через Lampa.Storage
@@ -176,6 +177,40 @@
         }
     }
 
+    // Обработка URL видео
+    function processVideoUrl(url) {
+        if (!url) return null;
+        
+        // Если URL уже полный
+        if (url.indexOf('http') === 0) {
+            // Исправляем проблему с .%D0%B0s
+            if (url.indexOf('.%D0%B0s/') !== -1) {
+                url = url.replace('.%D0%B0s/', '.as/');
+            }
+            // Убираем двойные слеши
+            url = url.replace(/([^:])\/\/+/g, '$1/');
+            return url;
+        }
+        
+        // Если относительный URL
+        if (url.indexOf('/') === 0) {
+            var fullUrl = CONFIG.videoHost + url;
+            if (fullUrl.indexOf('.%D0%B0s/') !== -1) {
+                fullUrl = fullUrl.replace('.%D0%B0s/', '.as/');
+            }
+            fullUrl = fullUrl.replace(/([^:])\/\/+/g, '$1/');
+            return fullUrl;
+        }
+        
+        // Если просто путь без слеша
+        var fullUrl = CONFIG.videoHost + '/' + url;
+        if (fullUrl.indexOf('.%D0%B0s/') !== -1) {
+            fullUrl = fullUrl.replace('.%D0%B0s/', '.as/');
+        }
+        fullUrl = fullUrl.replace(/([^:])\/\/+/g, '$1/');
+        return fullUrl;
+    }
+
     // Поиск аниме
     async function searchAnime(query) {
         var token = getToken();
@@ -228,7 +263,7 @@
         }
     }
 
-    // Получение плейлиста с прокси
+    // Получение плейлиста
     async function getAnimePlaylist(item) {
         var token = getToken();
         if (!token) {
@@ -288,21 +323,13 @@
                             return qb - qa;
                         });
                         
-                        // Используем прокси Lampa для обхода CORS
+                        // Обрабатываем ссылки
                         var processedQualities = qualities.map(function(q) {
-                            var videoUrl = q.href;
-                            // Если ссылка не полная, добавляем домен
-                            if (videoUrl && videoUrl.indexOf('http') !== 0) {
-                                videoUrl = 'https://video1.cdnlibs.org/.%D0%B0s/' + videoUrl;
-                            }
-                            
-                            // Используем прокси Lampa
-                            var proxiedUrl = '/proxy?url=' + encodeURIComponent(videoUrl) + '&headers=origin:' + CONFIG.host + '|referer:' + CONFIG.host + '/';
-                            
+                            var videoUrl = processVideoUrl(q.href);
                             return {
                                 quality: q.quality,
-                                href: proxiedUrl,
-                                original_url: videoUrl
+                                href: videoUrl,
+                                original: q.href
                             };
                         });
                         
@@ -315,11 +342,7 @@
                             url: bestQuality.href,
                             season: ep.season || 1,
                             episode: ep.number || i + 1,
-                            qualities: processedQualities,
-                            headers: {
-                                'Origin': CONFIG.host,
-                                'Referer': CONFIG.host + '/'
-                            }
+                            qualities: processedQualities
                         });
                     }
                 } catch (e) {
@@ -346,7 +369,8 @@
                 return;
             }
 
-            console.log('[AnimeLib] Воспроизведение:', episode.title, episode.url);
+            console.log('[AnimeLib] Воспроизведение:', episode.title);
+            console.log('[AnimeLib] URL:', episode.url);
 
             var playerData = {
                 url: episode.url,
@@ -354,18 +378,17 @@
                 description: episode.description || ''
             };
 
-            // Добавляем заголовки если есть
-            if (episode.headers) {
-                playerData.headers = episode.headers;
-            }
-
-            // Если есть качества, добавляем их
+            // Если есть качества
             if (episode.qualities && episode.qualities.length > 0) {
                 var qualityMap = {};
                 episode.qualities.forEach(function(q) {
-                    qualityMap[q.quality + 'p'] = q.href;
+                    if (q.href) {
+                        qualityMap[q.quality + 'p'] = q.href;
+                    }
                 });
-                playerData.quality = qualityMap;
+                if (Object.keys(qualityMap).length > 0) {
+                    playerData.quality = qualityMap;
+                }
             }
 
             Lampa.Player.play(playerData);
@@ -535,12 +558,17 @@
                 scroll.clear();
                 
                 episodes.forEach(function(ep) {
+                    var qualityText = '';
+                    if (ep.qualities && ep.qualities.length > 0) {
+                        qualityText = ep.qualities.map(function(q) { 
+                            return q.quality + 'p'; 
+                        }).join(' | ');
+                    }
+                    
                     var html = $('<div class="animelib-item selector" style="padding:1em;margin:0.5em 0;background:rgba(0,0,0,0.2);border-radius:0.3em;cursor:pointer">' +
                         '<div style="font-size:1.2em;font-weight:500">' + ep.title + '</div>' +
                         '<div style="opacity:0.7;font-size:0.9em">' + (ep.description || '') + '</div>' +
-                        '<div style="font-size:0.8em;opacity:0.5;margin-top:0.3em">' + 
-                            (ep.qualities ? ep.qualities.map(function(q) { return q.quality + 'p'; }).join(' | ') : '') + 
-                        '</div>' +
+                        (qualityText ? '<div style="font-size:0.8em;opacity:0.5;margin-top:0.3em">' + qualityText + '</div>' : '') +
                         '</div>');
                     
                     html.on('hover:enter', function() {
@@ -549,8 +577,7 @@
                                 return {
                                     title: q.quality + 'p',
                                     url: q.href,
-                                    index: index,
-                                    original_url: q.original_url
+                                    index: index
                                 };
                             });
                             
@@ -567,8 +594,7 @@
                                     var playData = {
                                         url: selected.url,
                                         title: ep.title + ' (' + selected.title + ')',
-                                        description: ep.description,
-                                        headers: ep.headers
+                                        description: ep.description
                                     };
                                     playVideo(playData);
                                     Lampa.Select.close();
