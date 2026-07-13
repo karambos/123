@@ -282,21 +282,18 @@
                     if (animelibPlayer && animelibPlayer.video?.quality?.length > 0) {
                         var qualities = animelibPlayer.video.quality;
                         
-                        // Сортируем качества по разрешению
                         qualities.sort(function(a, b) {
                             var qa = parseInt(a.quality) || 0;
                             var qb = parseInt(b.quality) || 0;
-                            return qb - qa; // Сначала высокое качество
+                            return qb - qa;
                         });
                         
-                        // Создаем объект с разными качествами
                         var qualityMap = {};
                         qualities.forEach(function(q) {
                             var qualityName = q.quality + 'p';
                             qualityMap[qualityName] = q.href;
                         });
                         
-                        // Берем самое высокое качество
                         var bestQuality = qualities[0];
                         
                         playlist.push({
@@ -327,7 +324,6 @@
     // Воспроизведение видео
     function playVideo(episode) {
         try {
-            // Проверяем, есть ли URL
             if (!episode.url) {
                 if (Lampa.Notify) {
                     Lampa.Notify.show('❌ Ссылка на видео не найдена', 'AnimeLib');
@@ -337,21 +333,16 @@
 
             console.log('[AnimeLib] Воспроизведение:', episode.title, episode.url);
 
-            // Создаем объект для плеера
             var playerData = {
                 url: episode.url,
                 title: episode.title,
-                description: episode.description || '',
-                poster: episode.poster || null
+                description: episode.description || ''
             };
 
-            // Если есть качества, добавляем их
             if (episode.qualities && Object.keys(episode.qualities).length > 0) {
                 playerData.quality = episode.qualities;
-                playerData.quality_default = Object.keys(episode.qualities)[0];
             }
 
-            // Воспроизводим
             Lampa.Player.play(playerData);
             
         } catch (e) {
@@ -362,7 +353,7 @@
         }
     }
 
-    // Компонент для Lampa
+    // Компонент для Lampa - исправлен
     function AnimeLibComponent() {
         return function(object) {
             var self = this;
@@ -389,7 +380,8 @@
                 };
                 
                 filter.onBack = function() {
-                    self.start();
+                    // Просто закрываем, без рекурсии
+                    Lampa.Activity.backward();
                 };
                 
                 filter.render().find('.filter--search').appendTo(filter.render().find('.torrent-filter'));
@@ -514,7 +506,6 @@
                         '</div>');
                     
                     html.on('hover:enter', function() {
-                        // Показываем выбор качества
                         if (ep.allQualities && ep.allQualities.length > 1) {
                             var qualityItems = ep.allQualities.map(function(q, index) {
                                 return {
@@ -547,7 +538,6 @@
                                 }
                             });
                         } else {
-                            // Воспроизводим сразу
                             playVideo(ep);
                         }
                     }).on('hover:focus', function(e) {
@@ -605,10 +595,20 @@
                     down: function() {
                         Navigator.move('down');
                     },
+                    right: function() {
+                        if (Navigator.canmove('right')) {
+                            Navigator.move('right');
+                        }
+                    },
                     left: function() {
-                        Lampa.Controller.toggle('menu');
+                        if (Navigator.canmove('left')) {
+                            Navigator.move('left');
+                        } else {
+                            Lampa.Controller.toggle('menu');
+                        }
                     },
                     back: function() {
+                        // Просто закрываем без рекурсии
                         Lampa.Activity.backward();
                     }
                 });
@@ -662,14 +662,10 @@
     function startPlugin() {
         console.log('[AnimeLib] Запуск плагина...');
 
-        // Регистрируем компонент
         var component = new AnimeLibComponent();
         Lampa.Component.add('animelib_component', component);
 
-        // Добавляем настройки
         setTimeout(addSettings, 1000);
-
-        // Добавляем кнопку в карточку
         setTimeout(addCardButton, 1500);
 
         if (!hasToken()) {
