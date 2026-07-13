@@ -342,7 +342,7 @@
         }
     }
 
-    // Компонент для Lampa - упрощенная версия без рекурсий
+    // Компонент для Lampa - без Filter
     function AnimeLibComponent() {
         return function(object) {
             var self = this;
@@ -350,8 +350,8 @@
                 mask: true,
                 over: true
             });
-            var filter = new Lampa.Filter(object);
             var initialized = false;
+            var searchInput = null;
 
             this.create = function() {
                 console.log('[AnimeLib] Создание компонента');
@@ -362,18 +362,34 @@
             this.initialize = function() {
                 console.log('[AnimeLib] Инициализация');
                 
-                filter.onSearch = function(value) {
+                // Создаем поисковую строку вручную
+                var head = $('<div class="torrent-filter" style="padding:0.5em 1em">' +
+                    '<div class="filter--search" style="display:flex;align-items:center;gap:0.5em">' +
+                    '<input type="text" id="animelib_search_input" style="flex:1;padding:0.6em;border-radius:0.3em;border:1px solid #444;background:rgba(0,0,0,0.3);color:#fff;font-size:1em" placeholder="Поиск аниме...">' +
+                    '<button class="selector" style="padding:0.6em 1.2em;border:none;border-radius:0.3em;background:#e74c3c;color:#fff;cursor:pointer">🔍</button>' +
+                    '</div>' +
+                    '</div>');
+                
+                scroll.body().addClass('torrent-list');
+                scroll.render().prepend(head);
+                
+                searchInput = head.find('#animelib_search_input');
+                var searchBtn = head.find('.selector');
+                
+                // Обработчик поиска
+                function doSearch() {
+                    var value = searchInput.val().trim();
                     if (value && value.length > 0) {
                         self.searchAnime(value);
                     }
-                };
+                }
                 
-                // Убираем onBack - он вызывает рекурсию
-                // filter.onBack = function() { ... }
-                
-                filter.render().find('.filter--search').appendTo(filter.render().find('.torrent-filter'));
-                
-                scroll.body().addClass('torrent-list');
+                searchBtn.on('hover:enter', doSearch);
+                searchInput.on('keydown', function(e) {
+                    if (e.key === 'Enter') {
+                        doSearch();
+                    }
+                });
                 
                 var loadingHtml = $('<div class="torrent-loading" style="padding:2em;text-align:center;color:rgba(255,255,255,0.5)">Загрузка...</div>');
                 scroll.append(loadingHtml);
@@ -387,6 +403,7 @@
 
                 var searchQuery = object.search || (object.movie ? object.movie.title || object.movie.name : '');
                 if (searchQuery) {
+                    searchInput.val(searchQuery);
                     self.searchAnime(searchQuery);
                 } else {
                     self.showError('Введите название', 'Для поиска введите название аниме');
@@ -595,9 +612,11 @@
                         }
                     },
                     back: function() {
-                        // Просто закрываем активность
-                        if (Lampa.Activity && Lampa.Activity.backward) {
+                        // Просто закрываем
+                        try {
                             Lampa.Activity.backward();
+                        } catch(e) {
+                            console.warn('[AnimeLib] Ошибка закрытия:', e);
                         }
                     }
                 });
