@@ -184,231 +184,218 @@
         }
     }
 
-    // Компонент для Lampa (правильная функция-конструктор)
-    function AnimeLibComponent(object) {
-        var self = this;
-        var network = new Lampa.Reguest();
-        var scroll = new Lampa.Scroll({
-            mask: true,
-            over: true
-        });
-        var files = new Lampa.Explorer(object);
-        var filter = new Lampa.Filter(object);
-        var last;
-        var initialized = false;
-        var currentResults = [];
-        var currentEpisodes = [];
+    // Компонент для Lampa (как в оригинальном Lampac)
+    function createVodComponent() {
+        return function(object) {
+            var network = new Lampa.Reguest();
+            var scroll = new Lampa.Scroll({
+                mask: true,
+                over: true
+            });
+            var files = new Lampa.Explorer(object);
+            var filter = new Lampa.Filter(object);
+            var last;
+            var initialized;
 
-        // Инициализация
-        this.initialize = function() {
-            console.log('[AnimeLib] Инициализация компонента');
-            self.loading(true);
-            
-            filter.onSearch = function(value) {
-                if (value && value.length > 0) {
-                    self.searchAnime(value);
+            // Функции компонента
+            function initialize() {
+                var _this = this;
+                loading(true);
+                
+                filter.onSearch = function(value) {
+                    if (value && value.length > 0) {
+                        searchAnimeInternal(value);
+                    }
+                };
+                
+                filter.onBack = function() {
+                    start();
+                };
+                
+                filter.render().find('.filter--search').appendTo(filter.render().find('.torrent-filter'));
+                
+                scroll.body().addClass('torrent-list');
+                files.appendFiles(scroll.render());
+                files.appendHead(filter.render());
+                scroll.minus(files.render().find('.explorer__files-head'));
+                scroll.body().append(Lampa.Template.get('animelib_content_loading'));
+                Lampa.Controller.enable('content');
+                loading(false);
+
+                // Начинаем поиск
+                var searchQuery = object.clarification ? object.search : (object.movie.title || object.movie.name);
+                if (searchQuery) {
+                    searchAnimeInternal(searchQuery);
                 }
-            };
-            
-            filter.onBack = function() {
-                self.start();
-            };
-            
-            filter.render().find('.filter--search').appendTo(filter.render().find('.torrent-filter'));
-            
-            scroll.body().addClass('torrent-list');
-            files.appendFiles(scroll.render());
-            files.appendHead(filter.render());
-            scroll.minus(files.render().find('.explorer__files-head'));
-            scroll.body().append(Lampa.Template.get('animelib_content_loading'));
-            Lampa.Controller.enable('content');
-            self.loading(false);
-
-            // Загружаем результаты поиска
-            var searchQuery = object.clarification ? object.search : (object.movie.title || object.movie.name);
-            if (searchQuery) {
-                self.searchAnime(searchQuery);
             }
-        };
 
-        // Поиск аниме
-        this.searchAnime = function(query) {
-            self.loading(true);
-            
-            // Сохраняем в историю поиска
-            object.search = query;
-            
-            searchAnime(query).then(function(results) {
-                currentResults = results;
-                if (results && results.length > 0) {
-                    self.drawResults(results);
-                } else {
-                    self.showError('Ничего не найдено', 'Попробуйте изменить поисковый запрос');
-                }
-                self.loading(false);
-            }).catch(function(e) {
-                console.error('[AnimeLib] Ошибка поиска:', e);
-                self.showError('Ошибка поиска', e.message || 'Проверьте подключение к интернету');
-                self.loading(false);
-            });
-        };
-
-        // Отображение результатов
-        this.drawResults = function(results) {
-            scroll.clear();
-            
-            results.forEach(function(result) {
-                var html = Lampa.Template.get('animelib_folder', {
-                    title: result.title,
-                    info: result.description,
-                    time: result.year || ''
-                });
+            function searchAnimeInternal(query) {
+                loading(true);
+                object.search = query;
                 
-                html.on('hover:enter', function() {
-                    self.loadEpisodes(result);
-                }).on('hover:focus', function(e) {
-                    last = e.target;
-                    scroll.update($(e.target), true);
+                searchAnime(query).then(function(results) {
+                    if (results && results.length > 0) {
+                        drawResults(results);
+                    } else {
+                        showError('Ничего не найдено', 'Попробуйте изменить поисковый запрос');
+                    }
+                    loading(false);
+                }).catch(function(e) {
+                    console.error('[AnimeLib] Ошибка поиска:', e);
+                    showError('Ошибка поиска', e.message || 'Проверьте подключение к интернету');
+                    loading(false);
                 });
-                
-                scroll.append(html);
-            });
-            
-            Lampa.Controller.enable('content');
-        };
+            }
 
-        // Загрузка эпизодов
-        this.loadEpisodes = function(item) {
-            self.loading(true);
-            
-            getAnimePlaylist(item).then(function(playlist) {
-                currentEpisodes = playlist;
-                if (playlist && playlist.length > 0) {
-                    self.drawEpisodes(playlist, item);
-                } else {
-                    self.showError('Нет серий', 'Для этого аниме пока нет доступных серий');
-                }
-                self.loading(false);
-            }).catch(function(e) {
-                console.error('[AnimeLib] Ошибка загрузки эпизодов:', e);
-                self.showError('Ошибка загрузки', e.message || 'Не удалось загрузить серии');
-                self.loading(false);
-            });
-        };
-
-        // Отображение эпизодов
-        this.drawEpisodes = function(episodes, item) {
-            scroll.clear();
-            
-            episodes.forEach(function(ep) {
-                var html = Lampa.Template.get('animelib_episode', {
-                    title: ep.title,
-                    info: ep.description || '',
-                    time: '',
-                    quality: ''
-                });
+            function drawResults(results) {
+                scroll.clear();
                 
-                html.on('hover:enter', function() {
-                    // Воспроизводим
-                    Lampa.Player.play({
-                        url: ep.url,
-                        title: ep.title
+                results.forEach(function(result) {
+                    var html = Lampa.Template.get('animelib_folder', {
+                        title: result.title,
+                        info: result.description,
+                        time: result.year || ''
                     });
-                }).on('hover:focus', function(e) {
-                    last = e.target;
-                    scroll.update($(e.target), true);
+                    
+                    html.on('hover:enter', function() {
+                        loadEpisodes(result);
+                    }).on('hover:focus', function(e) {
+                        last = e.target;
+                        scroll.update($(e.target), true);
+                    });
+                    
+                    scroll.append(html);
                 });
                 
+                Lampa.Controller.enable('content');
+            }
+
+            function loadEpisodes(item) {
+                loading(true);
+                
+                getAnimePlaylist(item).then(function(playlist) {
+                    if (playlist && playlist.length > 0) {
+                        drawEpisodes(playlist, item);
+                    } else {
+                        showError('Нет серий', 'Для этого аниме пока нет доступных серий');
+                    }
+                    loading(false);
+                }).catch(function(e) {
+                    console.error('[AnimeLib] Ошибка загрузки эпизодов:', e);
+                    showError('Ошибка загрузки', e.message || 'Не удалось загрузить серии');
+                    loading(false);
+                });
+            }
+
+            function drawEpisodes(episodes, item) {
+                scroll.clear();
+                
+                episodes.forEach(function(ep) {
+                    var html = Lampa.Template.get('animelib_episode', {
+                        title: ep.title,
+                        info: ep.description || '',
+                        time: '',
+                        quality: ''
+                    });
+                    
+                    html.on('hover:enter', function() {
+                        Lampa.Player.play({
+                            url: ep.url,
+                            title: ep.title
+                        });
+                    }).on('hover:focus', function(e) {
+                        last = e.target;
+                        scroll.update($(e.target), true);
+                    });
+                    
+                    scroll.append(html);
+                });
+                
+                Lampa.Controller.enable('content');
+            }
+
+            function showError(title, message) {
+                var html = Lampa.Template.get('animelib_error', {
+                    title: title,
+                    message: message
+                });
+                scroll.clear();
                 scroll.append(html);
-            });
-            
-            Lampa.Controller.enable('content');
-        };
+                loading(false);
+            }
 
-        // Показать ошибку
-        this.showError = function(title, message) {
-            var html = Lampa.Template.get('animelib_error', {
-                title: title,
-                message: message
-            });
-            scroll.clear();
-            scroll.append(html);
-            self.loading(false);
-        };
-
-        // Управление загрузкой
-        this.loading = function(status) {
-            if (status) {
-                if (self.activity) self.activity.loader(true);
-            } else {
-                if (self.activity) {
-                    self.activity.loader(false);
-                    self.activity.toggle();
+            function loading(status) {
+                if (status) {
+                    if (this.activity) this.activity.loader(true);
+                } else {
+                    if (this.activity) {
+                        this.activity.loader(false);
+                        this.activity.toggle();
+                    }
                 }
             }
-        };
 
-        // Старт
-        this.start = function() {
-            if (Lampa.Activity.active().activity !== self.activity) return;
-            
-            if (!initialized) {
-                initialized = true;
-                self.initialize();
+            function start() {
+                if (Lampa.Activity.active().activity !== this.activity) return;
+                if (!initialized) {
+                    initialized = true;
+                    initialize.call(this);
+                }
+                
+                Lampa.Background.immediately(Lampa.Utils.cardImgBackgroundBlur(object.movie));
+                
+                Lampa.Controller.add('content', {
+                    toggle: function() {
+                        Lampa.Controller.collectionSet(scroll.render(), files.render());
+                        Lampa.Controller.collectionFocus(last || false, scroll.render());
+                    },
+                    up: function() {
+                        if (Navigator.canmove('up')) {
+                            Navigator.move('up');
+                        } else {
+                            Lampa.Controller.toggle('head');
+                        }
+                    },
+                    down: function() {
+                        Navigator.move('down');
+                    },
+                    right: function() {
+                        if (Navigator.canmove('right')) {
+                            Navigator.move('right');
+                        } else {
+                            filter.show('Фильтр', 'filter');
+                        }
+                    },
+                    left: function() {
+                        if (Navigator.canmove('left')) {
+                            Navigator.move('left');
+                        } else {
+                            Lampa.Controller.toggle('menu');
+                        }
+                    },
+                    back: function() {
+                        Lampa.Activity.backward();
+                    }
+                });
+                
+                Lampa.Controller.toggle('content');
             }
-            
-            Lampa.Background.immediately(Lampa.Utils.cardImgBackgroundBlur(object.movie));
-            
-            Lampa.Controller.add('content', {
-                toggle: function() {
-                    Lampa.Controller.collectionSet(scroll.render(), files.render());
-                    Lampa.Controller.collectionFocus(last || false, scroll.render());
-                },
-                up: function() {
-                    if (Navigator.canmove('up')) {
-                        Navigator.move('up');
-                    } else {
-                        Lampa.Controller.toggle('head');
-                    }
-                },
-                down: function() {
-                    Navigator.move('down');
-                },
-                right: function() {
-                    if (Navigator.canmove('right')) {
-                        Navigator.move('right');
-                    } else {
-                        filter.show('Фильтр', 'filter');
-                    }
-                },
-                left: function() {
-                    if (Navigator.canmove('left')) {
-                        Navigator.move('left');
-                    } else {
-                        Lampa.Controller.toggle('menu');
-                    }
-                },
-                back: self.back.bind(self)
-            });
-            
-            Lampa.Controller.toggle('content');
-        };
 
-        // Назад
-        this.back = function() {
-            Lampa.Activity.backward();
-        };
-
-        // Рендер
-        this.render = function() {
-            return files.render();
-        };
-
-        // Уничтожение
-        this.destroy = function() {
-            network.clear();
-            files.destroy();
-            scroll.destroy();
+            // Публичные методы
+            this.initialize = initialize;
+            this.start = start;
+            this.render = function() {
+                return files.render();
+            };
+            this.destroy = function() {
+                network.clear();
+                files.destroy();
+                scroll.destroy();
+            };
+            this.loading = loading;
+            this.back = function() {
+                Lampa.Activity.backward();
+            };
         };
     }
 
@@ -459,7 +446,8 @@
         addTemplates();
 
         // Регистрируем компонент
-        Lampa.Component.add('vod', AnimeLibComponent);
+        var VodComponent = createVodComponent();
+        Lampa.Component.add('vod', VodComponent);
 
         // Добавляем кнопку в карточку
         var buttonHtml = '<div class="full-start__button selector view--animelib" style="background:rgba(255,50,50,0.2);margin-top:0.5em">\n            <svg viewBox="0 0 24 24" width="24" height="24">\n                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 14.5v-9l6 4.5-6 4.5z" fill="currentColor"/>\n            </svg>\n            <span>AnimeLib</span>\n        </div>';
@@ -471,7 +459,7 @@
                 
                 var btn = $(buttonHtml);
                 btn.on('hover:enter', function() {
-                    Lampa.Component.add('vod', AnimeLibComponent);
+                    Lampa.Component.add('vod', VodComponent);
                     Lampa.Activity.push({
                         title: 'AnimeLib',
                         component: 'vod',
@@ -577,11 +565,11 @@
     // Запуск
     if (typeof Lampa !== 'undefined') {
         if (window.appready) {
-            startPlugin();
+            setTimeout(startPlugin, 500);
         } else {
             Lampa.Listener.follow('app', function(event) {
                 if (event.type === 'ready') {
-                    startPlugin();
+                    setTimeout(startPlugin, 500);
                 }
             });
         }
@@ -591,11 +579,11 @@
                 if (typeof Lampa !== 'undefined') {
                     clearInterval(checkLampa);
                     if (window.appready) {
-                        startPlugin();
+                        setTimeout(startPlugin, 500);
                     } else {
                         Lampa.Listener.follow('app', function(event) {
                             if (event.type === 'ready') {
-                                startPlugin();
+                                setTimeout(startPlugin, 500);
                             }
                         });
                     }
