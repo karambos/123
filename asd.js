@@ -288,7 +288,20 @@
                             return qb - qa;
                         });
                         
-                        var bestQuality = qualities[0];
+                        // Обрабатываем ссылки - добавляем прокси если нужно
+                        var processedQualities = qualities.map(function(q) {
+                            var url = q.href;
+                            // Если ссылка не полная, добавляем домен
+                            if (url && url.indexOf('http') !== 0) {
+                                url = 'https://video1.cdnlibs.org/.%D0%B0s/' + url;
+                            }
+                            return {
+                                quality: q.quality,
+                                href: url
+                            };
+                        });
+                        
+                        var bestQuality = processedQualities[0];
                         
                         playlist.push({
                             id: ep.id,
@@ -297,7 +310,11 @@
                             url: bestQuality.href,
                             season: ep.season || 1,
                             episode: ep.number || i + 1,
-                            qualities: qualities
+                            qualities: processedQualities,
+                            headers: {
+                                'Origin': CONFIG.host,
+                                'Referer': CONFIG.host + '/'
+                            }
                         });
                     }
                 } catch (e) {
@@ -314,7 +331,7 @@
         }
     }
 
-    // Воспроизведение видео
+    // Воспроизведение видео с прокси
     function playVideo(episode) {
         try {
             if (!episode.url) {
@@ -332,6 +349,20 @@
                 description: episode.description || ''
             };
 
+            // Добавляем заголовки если есть
+            if (episode.headers) {
+                playerData.headers = episode.headers;
+            }
+
+            // Если есть качества
+            if (episode.qualities && episode.qualities.length > 0) {
+                var qualityMap = {};
+                episode.qualities.forEach(function(q) {
+                    qualityMap[q.quality + 'p'] = q.href;
+                });
+                playerData.quality = qualityMap;
+            }
+
             Lampa.Player.play(playerData);
             
         } catch (e) {
@@ -342,7 +373,7 @@
         }
     }
 
-    // Компонент для Lampa - без Filter
+    // Компонент для Lampa
     function AnimeLibComponent() {
         return function(object) {
             var self = this;
@@ -362,7 +393,6 @@
             this.initialize = function() {
                 console.log('[AnimeLib] Инициализация');
                 
-                // Создаем поисковую строку вручную
                 var head = $('<div class="torrent-filter" style="padding:0.5em 1em">' +
                     '<div class="filter--search" style="display:flex;align-items:center;gap:0.5em">' +
                     '<input type="text" id="animelib_search_input" style="flex:1;padding:0.6em;border-radius:0.3em;border:1px solid #444;background:rgba(0,0,0,0.3);color:#fff;font-size:1em" placeholder="Поиск аниме...">' +
@@ -376,7 +406,6 @@
                 searchInput = head.find('#animelib_search_input');
                 var searchBtn = head.find('.selector');
                 
-                // Обработчик поиска
                 function doSearch() {
                     var value = searchInput.val().trim();
                     if (value && value.length > 0) {
@@ -532,7 +561,8 @@
                                     var playData = {
                                         url: selected.url,
                                         title: ep.title + ' (' + selected.title + ')',
-                                        description: ep.description
+                                        description: ep.description,
+                                        headers: ep.headers
                                     };
                                     playVideo(playData);
                                     Lampa.Select.close();
@@ -612,7 +642,6 @@
                         }
                     },
                     back: function() {
-                        // Просто закрываем
                         try {
                             Lampa.Activity.backward();
                         } catch(e) {
