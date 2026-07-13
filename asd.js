@@ -35,7 +35,7 @@
     function showTokenDialog(callback) {
         var currentToken = getToken();
         
-        var dialog = $('<div class="modal animelib-modal" style="position:fixed;top:0;left:0;right:0;bottom:0;z-index:9999;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.85)">' +
+        var dialog = $('<div class="modal animelib-modal" style="position:fixed;top:0;left:0;right:0;bottom:0;z-index:9999;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.85);z-index:99999">' +
             '<div style="background:#1a1a2e;padding:2em;border-radius:0.5em;max-width:500px;width:90%;border:1px solid #333">' +
             '<div style="font-size:1.5em;margin-bottom:0.3em;text-align:center">🎌 AnimeLib</div>' +
             '<div style="opacity:0.6;margin-bottom:1.5em;text-align:center;font-size:0.9em">Введите Access Token для доступа к Anilib.me</div>' +
@@ -87,18 +87,15 @@
         });
     }
 
-    // Добавление настроек через правильный API
+    // Добавление настроек
     function addSettings() {
         console.log('[AnimeLib] Добавление настроек...');
         
         try {
-            // Проверяем, есть ли уже настройки
             if (Lampa.SettingsApi.getComponent && Lampa.SettingsApi.getComponent('animelib_settings')) {
-                console.log('[AnimeLib] Настройки уже добавлены');
                 return;
             }
 
-            // Добавляем настройки через SettingsApi
             Lampa.SettingsApi.addComponent({
                 component: 'animelib_settings',
                 name: '🎌 AnimeLib',
@@ -116,7 +113,6 @@
                                 if (Lampa.Notify) {
                                     Lampa.Notify.show('✅ Токен сохранен', 'AnimeLib');
                                 }
-                                console.log('[AnimeLib] Токен сохранен');
                             } else {
                                 if (Lampa.Notify) {
                                     Lampa.Notify.show('❌ Токен не может быть пустым', 'AnimeLib');
@@ -168,13 +164,6 @@
                             if (Lampa.Notify) {
                                 Lampa.Notify.show('✅ Токен удален', 'AnimeLib');
                             }
-                            // Обновляем поле
-                            var inputs = document.querySelectorAll('[name="animelib_token"]');
-                            inputs.forEach(function(input) {
-                                if (input.value !== undefined) {
-                                    input.value = '';
-                                }
-                            });
                         }
                     }
                 ]
@@ -184,46 +173,7 @@
             
         } catch (e) {
             console.error('[AnimeLib] Ошибка добавления настроек:', e);
-            // Если SettingsApi не работает, добавляем кнопку в меню
-            addMenuButton();
         }
-    }
-
-    // Добавление кнопки в меню (запасной вариант)
-    function addMenuButton() {
-        console.log('[AnimeLib] Добавление кнопки в меню (запасной вариант)...');
-        
-        // Ждем загрузки меню
-        var checkMenu = setInterval(function() {
-            var menuList = document.querySelector('.menu__list');
-            if (menuList) {
-                clearInterval(checkMenu);
-                
-                if (document.querySelector('.animelib-menu-btn')) {
-                    return;
-                }
-                
-                var btn = $('<div class="menu__item selector animelib-menu-btn" style="padding:0.8em 1.2em;cursor:pointer;display:flex;align-items:center;gap:0.8em">' +
-                    '<span style="font-size:1.2em">🎌</span>' +
-                    '<span style="font-size:0.9em">AnimeLib</span>' +
-                    '</div>');
-                
-                btn.on('hover:enter', function() {
-                    showTokenDialog(function(success) {
-                        if (success && Lampa.Notify) {
-                            Lampa.Notify.show('✅ Токен сохранен!', 'AnimeLib');
-                        }
-                    });
-                });
-                
-                $(menuList).append(btn);
-                console.log('[AnimeLib] Кнопка добавлена в меню');
-            }
-        }, 500);
-
-        setTimeout(function() {
-            clearInterval(checkMenu);
-        }, 10000);
     }
 
     // Поиск аниме
@@ -264,7 +214,8 @@
                         title: title,
                         description: (anime.eng_name || '') + ' (' + year + ')',
                         year: year,
-                        url: anime.slug_url
+                        url: anime.slug_url,
+                        poster: anime.cover ? anime.cover.default : null
                     });
                 });
             }
@@ -277,7 +228,7 @@
         }
     }
 
-    // Получение плейлиста
+    // Получение плейлиста с качеством
     async function getAnimePlaylist(item) {
         var token = getToken();
         if (!token) {
@@ -330,7 +281,23 @@
                     
                     if (animelibPlayer && animelibPlayer.video?.quality?.length > 0) {
                         var qualities = animelibPlayer.video.quality;
-                        var bestQuality = qualities[qualities.length - 1];
+                        
+                        // Сортируем качества по разрешению
+                        qualities.sort(function(a, b) {
+                            var qa = parseInt(a.quality) || 0;
+                            var qb = parseInt(b.quality) || 0;
+                            return qb - qa; // Сначала высокое качество
+                        });
+                        
+                        // Создаем объект с разными качествами
+                        var qualityMap = {};
+                        qualities.forEach(function(q) {
+                            var qualityName = q.quality + 'p';
+                            qualityMap[qualityName] = q.href;
+                        });
+                        
+                        // Берем самое высокое качество
+                        var bestQuality = qualities[0];
                         
                         playlist.push({
                             id: ep.id,
@@ -338,7 +305,9 @@
                             description: ep.name || item.title + ' - ' + ep.number + ' серия',
                             url: bestQuality.href,
                             season: ep.season || 1,
-                            episode: ep.number || i + 1
+                            episode: ep.number || i + 1,
+                            qualities: qualityMap,
+                            allQualities: qualities
                         });
                     }
                 } catch (e) {
@@ -352,6 +321,44 @@
         } catch (e) {
             console.error('[AnimeLib] Ошибка получения плейлиста:', e);
             return null;
+        }
+    }
+
+    // Воспроизведение видео
+    function playVideo(episode) {
+        try {
+            // Проверяем, есть ли URL
+            if (!episode.url) {
+                if (Lampa.Notify) {
+                    Lampa.Notify.show('❌ Ссылка на видео не найдена', 'AnimeLib');
+                }
+                return;
+            }
+
+            console.log('[AnimeLib] Воспроизведение:', episode.title, episode.url);
+
+            // Создаем объект для плеера
+            var playerData = {
+                url: episode.url,
+                title: episode.title,
+                description: episode.description || '',
+                poster: episode.poster || null
+            };
+
+            // Если есть качества, добавляем их
+            if (episode.qualities && Object.keys(episode.qualities).length > 0) {
+                playerData.quality = episode.qualities;
+                playerData.quality_default = Object.keys(episode.qualities)[0];
+            }
+
+            // Воспроизводим
+            Lampa.Player.play(playerData);
+            
+        } catch (e) {
+            console.error('[AnimeLib] Ошибка воспроизведения:', e);
+            if (Lampa.Notify) {
+                Lampa.Notify.show('❌ Ошибка воспроизведения: ' + e.message, 'AnimeLib');
+            }
         }
     }
 
@@ -501,13 +508,48 @@
                     var html = $('<div class="animelib-item selector" style="padding:1em;margin:0.5em 0;background:rgba(0,0,0,0.2);border-radius:0.3em;cursor:pointer">' +
                         '<div style="font-size:1.2em;font-weight:500">' + ep.title + '</div>' +
                         '<div style="opacity:0.7;font-size:0.9em">' + (ep.description || '') + '</div>' +
+                        '<div style="font-size:0.8em;opacity:0.5;margin-top:0.3em">' + 
+                            (ep.allQualities ? ep.allQualities.map(function(q) { return q.quality + 'p'; }).join(' | ') : '') + 
+                        '</div>' +
                         '</div>');
                     
                     html.on('hover:enter', function() {
-                        Lampa.Player.play({
-                            url: ep.url,
-                            title: ep.title
-                        });
+                        // Показываем выбор качества
+                        if (ep.allQualities && ep.allQualities.length > 1) {
+                            var qualityItems = ep.allQualities.map(function(q, index) {
+                                return {
+                                    title: q.quality + 'p',
+                                    url: q.href,
+                                    index: index
+                                };
+                            });
+                            
+                            Lampa.Select.show({
+                                title: 'Выберите качество',
+                                items: qualityItems.map(function(q) {
+                                    return {
+                                        title: q.title,
+                                        data: q
+                                    };
+                                }),
+                                onSelect: function(item) {
+                                    var selected = item.data;
+                                    var playData = {
+                                        url: selected.url,
+                                        title: ep.title + ' (' + selected.title + ')',
+                                        description: ep.description
+                                    };
+                                    playVideo(playData);
+                                    Lampa.Select.close();
+                                },
+                                onBack: function() {
+                                    Lampa.Select.close();
+                                }
+                            });
+                        } else {
+                            // Воспроизводим сразу
+                            playVideo(ep);
+                        }
                     }).on('hover:focus', function(e) {
                         scroll.update($(e.target), true);
                     });
