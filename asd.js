@@ -10108,6 +10108,16 @@
 
         var url = addTokenToUrl(embed + 'anime?fields[]=rate_avg&fields[]=rate&fields[]=releaseDate');
         url = Lampa.Utils.addUrlComponent(url, 'q=' + encodeURIComponent(select_title));
+        component.proxyCall('GET', url, 15000, null, function(response) {
+            try {
+                var json = JSON.parse(response);
+                display(json && json.data);
+            } catch(e) {
+                component.empty('Ошибка парсинга ответа');
+            }
+        }, function(a, c) {
+            component.empty('Ошибка запроса к AnimeLib');
+        });
         
         network.clear();
         network.timeout(1000 * 15);
