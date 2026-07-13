@@ -180,9 +180,8 @@
         }
     }
 
-    // Компонент для Lampa (правильная структура)
+    // Компонент для Lampa
     function AnimeLibComponent() {
-        // Это функция-конструктор, которая будет вызвана с объектом
         return function(object) {
             var self = this;
             var scroll = new Lampa.Scroll({
@@ -191,9 +190,8 @@
             });
             var filter = new Lampa.Filter(object);
             var initialized = false;
-            var resultsList = [];
 
-            // Метод create - обязательный для Lampa
+            // Метод create - обязательный
             this.create = function() {
                 console.log('[AnimeLib] Создание компонента');
                 self.initialize();
@@ -216,12 +214,18 @@
                 filter.render().find('.filter--search').appendTo(filter.render().find('.torrent-filter'));
                 
                 scroll.body().addClass('torrent-list');
-                scroll.body().append('<div class="torrent-loading">Загрузка...</div>');
+                
+                // Добавляем элемент загрузки
+                var loadingHtml = $('<div class="torrent-loading" style="padding:2em;text-align:center;color:rgba(255,255,255,0.5)">Загрузка...</div>');
+                scroll.append(loadingHtml);
+                
                 Lampa.Controller.enable('content');
 
-                var searchQuery = object.search || object.movie.title || object.movie.name;
+                var searchQuery = object.search || (object.movie ? object.movie.title || object.movie.name : '');
                 if (searchQuery) {
                     self.searchAnime(searchQuery);
+                } else {
+                    self.showError('Введите название', 'Для поиска введите название аниме');
                 }
             };
 
@@ -230,7 +234,6 @@
                 object.search = query;
                 
                 searchAnime(query).then(function(results) {
-                    resultsList = results;
                     if (results && results.length > 0) {
                         self.drawResults(results);
                     } else {
@@ -248,7 +251,7 @@
                 scroll.clear();
                 
                 results.forEach(function(result) {
-                    var html = $('<div class="animelib-item selector" style="padding:1em;margin:0.5em 0;background:rgba(0,0,0,0.2);border-radius:0.3em">' +
+                    var html = $('<div class="animelib-item selector" style="padding:1em;margin:0.5em 0;background:rgba(0,0,0,0.2);border-radius:0.3em;cursor:pointer">' +
                         '<div style="font-size:1.3em;font-weight:500">' + result.title + '</div>' +
                         '<div style="opacity:0.7;font-size:0.9em">' + result.description + '</div>' +
                         '</div>');
@@ -286,7 +289,7 @@
                 scroll.clear();
                 
                 episodes.forEach(function(ep) {
-                    var html = $('<div class="animelib-item selector" style="padding:1em;margin:0.5em 0;background:rgba(0,0,0,0.2);border-radius:0.3em">' +
+                    var html = $('<div class="animelib-item selector" style="padding:1em;margin:0.5em 0;background:rgba(0,0,0,0.2);border-radius:0.3em;cursor:pointer">' +
                         '<div style="font-size:1.2em;font-weight:500">' + ep.title + '</div>' +
                         '<div style="opacity:0.7;font-size:0.9em">' + (ep.description || '') + '</div>' +
                         '</div>');
@@ -308,10 +311,11 @@
 
             this.showError = function(title, message) {
                 scroll.clear();
-                scroll.append('<div style="padding:2em;text-align:center">' +
+                var html = $('<div style="padding:2em;text-align:center">' +
                     '<div style="font-size:1.8em;margin-bottom:0.5em">' + title + '</div>' +
                     '<div style="opacity:0.7;font-size:1.2em">' + message + '</div>' +
                     '</div>');
+                scroll.append(html);
                 self.loading(false);
             };
 
